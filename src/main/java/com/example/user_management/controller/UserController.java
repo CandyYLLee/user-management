@@ -1,14 +1,16 @@
 package com.example.user_management.controller;
 
+import com.example.user_management.dto.AssignUserRequest;
+import com.example.user_management.dto.UpdateUserRequest;
+import com.example.user_management.dto.UserQuery;
+import com.example.user_management.model.Account;
 import com.example.user_management.model.User;
 import com.example.user_management.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
-import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/users")
@@ -21,45 +23,63 @@ public class UserController {
         this.userService = userService;
     }
 
+    /* ===================== 查询 ===================== */
+
     @GetMapping
-    public ResponseEntity<List<User>> getAllUsers() {
-        List<User> users = userService.getAllUsers();
-        return new ResponseEntity<>(users, HttpStatus.OK);
+    public Page<User> list(@AuthenticationPrincipal Account account,
+                           UserQuery query,
+                           @org.springframework.data.web.PageableDefault Pageable pageable) {
+        query.setPageable(pageable);
+        return userService.queryUsers(account, query);
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<User> getUserById(@PathVariable Long id) {
-        Optional<User> user = userService.getUserById(id);
-        return user.map(ResponseEntity::ok)
-                .orElseGet(() -> new ResponseEntity<>(HttpStatus.NOT_FOUND));
+    public User detail(@AuthenticationPrincipal Account account,
+                      @PathVariable Long id) {
+        return userService.getUserDetail(account, id);
     }
 
-    @PostMapping
-    public ResponseEntity<User> createUser(@RequestBody User user) {
-        User createdUser = userService.createUser(user);
-        return new ResponseEntity<>(createdUser, HttpStatus.CREATED);
-    }
+    /* ===================== 编辑 ===================== */
 
     @PutMapping("/{id}")
-    public ResponseEntity<User> updateUser(@PathVariable Long id, @RequestBody User user) {
-        User updatedUser = userService.updateUser(id, user);
-        if (updatedUser != null) {
-            return new ResponseEntity<>(updatedUser, HttpStatus.OK);
-        } else {
-            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
-        }
+    public void edit(@AuthenticationPrincipal Account account,
+                     @PathVariable Long id,
+                     @RequestBody UpdateUserRequest request) {
+        userService.editUser(account, id, request);
     }
 
-    @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteUser(@PathVariable Long id) {
-        userService.deleteUser(id);
-        return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+    /* ===================== 分配负责人 ===================== */
+
+    @PutMapping("/{id}/assign")
+    public void assign(@AuthenticationPrincipal Account account,
+                       @PathVariable Long id,
+                       @RequestBody AssignUserRequest request) {
+        userService.assignUser(account, id, request);
     }
 
-    @GetMapping("/email/{email}")
-    public ResponseEntity<User> getUserByEmail(@PathVariable String email) {
-        Optional<User> user = userService.getUserByEmail(email);
-        return user.map(ResponseEntity::ok)
-                .orElseGet(() -> new ResponseEntity<>(HttpStatus.NOT_FOUND));
+    /* ===================== 状态操作 ===================== */
+
+    @PutMapping("/{id}/disable")
+    public void disable(@AuthenticationPrincipal Account account,
+                        @PathVariable Long id) {
+        userService.disableUser(account, id);
+    }
+
+    @PutMapping("/{id}/enable")
+    public void enable(@AuthenticationPrincipal Account account,
+                       @PathVariable Long id) {
+        userService.enableUser(account, id);
+    }
+
+    @PutMapping("/{id}/archive")
+    public void archive(@AuthenticationPrincipal Account account,
+                        @PathVariable Long id) {
+        userService.archiveUser(account, id);
+    }
+
+    @PutMapping("/{id}/unarchive")
+    public void unarchive(@AuthenticationPrincipal Account account,
+                          @PathVariable Long id) {
+        userService.unarchiveUser(account, id);
     }
 }

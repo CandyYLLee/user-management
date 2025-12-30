@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>用户操作审计</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <style>
+        .audit-container {
+            max-width: 1200px;
+            margin: 20px auto;
+        }
+        .query-section {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .table-section {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .action-badge {
+            font-size: 0.875rem;
+            padding: 4px 8px;
+            border-radius: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="audit-container">
+        <h1 class="mb-4">用户操作审计</h1>
+        
+        <!-- 查询条件区 -->
+        <div class="query-section">
+            <h2 class="h5 mb-3">查询条件</h2>
+            <form id="queryForm" class="row g-3">
+                <div class="col-md-2">
+                    <label for="userId" class="form-label">用户ID</label>
+                    <input type="number" class="form-control" id="userId" name="userId">
+                </div>
+                <div class="col-md-2">
+                    <label for="operatorId" class="form-label">操作人ID</label>
+                    <input type="number" class="form-control" id="operatorId" name="operatorId">
+                </div>
+                <div class="col-md-2">
+                    <label for="action" class="form-label">操作类型</label>
+                    <select class="form-select" id="action" name="action">
+                        <option value="">全部</option>
+                        <option th:each="action : ${actionTypes}" 
+                                th:value="${action}" 
+                                th:text="${action}"></option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="startTime" class="form-label">开始时间</label>
+                    <input type="datetime-local" class="form-control" id="startTime" name="startTime">
+                </div>
+                <div class="col-md-3">
+                    <label for="endTime" class="form-label">结束时间</label>
+                    <input type="datetime-local" class="form-control" id="endTime" name="endTime">
+                </div>
+                <div class="col-12">
+                    <button type="button" id="queryBtn" class="btn btn-primary">查询</button>
+                    <button type="reset" class="btn btn-secondary ms-2">重置</button>
+                </div>
+            </form>
+        </div>
+        
+        <!-- 日志表格 -->
+        <div class="table-section">
+            <h2 class="h5 mb-3">操作日志</h2>
+            <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                    <thead>
+                        <tr>
+                            <th>时间</th>
+                            <th>操作人</th>
+                            <th>操作类型</th>
+                            <th>用户</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logsTableBody">
+                        <tr>
+                            <td colspan="4" class="text-center">请点击查询按钮获取日志</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- 分页 -->
+            <nav aria-label="Page navigation" class="mt-4">
+                <ul class="pagination justify-content-center" id="pagination"></ul>
+            </nav>
+        </div>
+    </div>
+    
+    <script>
+        // 当前页码和每页大小
+        let currentPage = 0;
+        const pageSize = 10;
+        
+        // 查询日志
+        function queryLogs(page = 0) {
+            // 获取查询参数
+            const userId = document.getElementById('userId').value;
+            const operatorId = document.getElementById('operatorId').value;
+            const action = document.getElementById('action').value;
+            const startTime = document.getElementById('startTime').value;
+            const endTime = document.getElementById('endTime').value;
+            
+            // 构建请求URL
+            let url = `/api/user-logs?page=${page}&size=${pageSize}`;
+            if (userId) url += `&userId=${userId}`;
+            if (operatorId) url += `&operatorId=${operatorId}`;
+            if (action) url += `&action=${action}`;
+            if (startTime) url += `&startTime=${startTime}`;
+            if (endTime) url += `&endTime=${endTime}`;
+            
+            // 发送请求
+            axios.get(url)
+                .then(response => {
+                    const data = response.data;
+                    renderLogs(data.content);
+                    renderPagination(data.totalPages, data.totalElements, page);
+                    currentPage = page;
+                })
+                .catch(error => {
+                    console.error('查询日志失败:', error);
+                    alert('查询日志失败，请稍后重试');
+                });
+        }
+        
+        // 渲染日志表格
+        function renderLogs(logs) {
+            const tableBody = document.getElementById('logsTableBody');
+            
+            if (logs.length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="4" class="text-center">暂无日志数据</td></tr>';
+                return;
+            }
+            
+            const rows = logs.map(log => `
+                <tr>
+                    <td>${new Date(log.createdAt).toLocaleString()}</td>
+                    <td>${log.operatorId}</td>
+                    <td>
+                        <span class="badge action-badge" 
+                              style="background-color: ${getActionColor(log.action)}">
+                            ${log.action}
+                        </span>
+                    </td>
+                    <td>${log.userId}</td>
+                </tr>
+            `).join('');
+            
+            tableBody.innerHTML = rows;
+        }
+        
+        // 根据操作类型获取颜色
+        function getActionColor(action) {
+            const colors = {
+                'EDIT': '#0d6efd',
+                'ASSIGN': '#198754',
+                'DISABLE': '#ffc107',
+                'ARCHIVE': '#dc3545'
+            };
+            return colors[action] || '#6c757d';
+        }
+        
+        // 渲染分页
+        function renderPagination(totalPages, totalElements, currentPage) {
+            const pagination = document.getElementById('pagination');
+            pagination.innerHTML = '';
+            
+            // 首页按钮
+            const firstPageItem = document.createElement('li');
+            firstPageItem.className = `page-item ${currentPage === 0 ? 'disabled' : ''}`;
+            firstPageItem.innerHTML = `<a class="page-link" href="#" onclick="queryLogs(0)">首页</a>`;
+            pagination.appendChild(firstPageItem);
+            
+            // 上一页按钮
+            const prevPageItem = document.createElement('li');
+            prevPageItem.className = `page-item ${currentPage === 0 ? 'disabled' : ''}`;
+            prevPageItem.innerHTML = `<a class="page-link" href="#" onclick="queryLogs(${currentPage - 1})">&laquo;</a>`;
+            pagination.appendChild(prevPageItem);
+            
+            // 页码按钮
+            const maxVisiblePages = 5;
+            let startPage = Math.max(0, currentPage - Math.floor(maxVisiblePages / 2));
+            let endPage = Math.min(totalPages - 1, startPage + maxVisiblePages - 1);
+            
+            if (endPage - startPage + 1 < maxVisiblePages) {
+                startPage = Math.max(0, endPage - maxVisiblePages + 1);
+            }
+            
+            for (let i = startPage; i <= endPage; i++) {
+                const pageItem = document.createElement('li');
+                pageItem.className = `page-item ${i === currentPage ? 'active' : ''}`;
+                pageItem.innerHTML = `<a class="page-link" href="#" onclick="queryLogs(${i})">${i + 1}</a>`;
+                pagination.appendChild(pageItem);
+            }
+            
+            // 下一页按钮
+            const nextPageItem = document.createElement('li');
+            nextPageItem.className = `page-item ${currentPage === totalPages - 1 ? 'disabled' : ''}`;
+            nextPageItem.innerHTML = `<a class="page-link" href="#" onclick="queryLogs(${currentPage + 1})">&raquo;</a>`;
+            pagination.appendChild(nextPageItem);
+            
+            // 末页按钮
+            const lastPageItem = document.createElement('li');
+            lastPageItem.className = `page-item ${currentPage === totalPages - 1 ? 'disabled' : ''}`;
+            lastPageItem.innerHTML = `<a class="page-link" href="#" onclick="queryLogs(${totalPages - 1})")">末页</a>`;
+            pagination.appendChild(lastPageItem);
+            
+            // 总记录数
+            const infoItem = document.createElement('li');
+            infoItem.className = 'page-item disabled';
+            infoItem.innerHTML = `<span class="page-link">共 ${totalElements} 条记录</span>`;
+            pagination.appendChild(infoItem);
+        }
+        
+        // 页面加载完成后绑定事件
+        document.addEventListener('DOMContentLoaded', function() {
+            // 查询按钮点击事件
+            document.getElementById('queryBtn').addEventListener('click', function() {
+                queryLogs(0);
+            });
+        });
+    </script>
+</body>
+</html>
